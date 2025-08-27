@@ -89,6 +89,9 @@ class AIPlayer(Player):
     #
     # This agent simply gathers food as fast as it can with its worker.  It
     # never attacks and never builds more ants.  The queen is never moved.
+    # Will be modified going forward with different strategies
+    # If food count is < 2, gather food
+    # If food count is > 2, build soldier ant and move it toward enemy tunnel
     #
     ##
     def getMove(self, currentState):
