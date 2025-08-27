@@ -4,6 +4,8 @@ OPTION 1 - hyper-aggressive food play - place grass all along border, tunnel in 
 
 OPTION 2 - Get one extra food, have drone kill worker ants for opposing team right away, then grind food
 
+OPTION 3 - Grind food up until 6, get 3 soldiers to kill queen
+
 ### Hill placement
 place on some spot on back row, surround with grass
 ### Tunnel placement
@@ -17,3 +19,14 @@ Before every play, check if any worker ants exist - if not, make one
 First - gather food until you get 2
 If opposing side only has workers
 
+
+
+
+PROPOSAL TREE:
+
+(Stage 1 - game start)                      [START - 1 food]
+                                Make another worker; gather food immediately
+                        
+(Stage 2 - 2 food) [if opponent has only workers, create drone and go after them]  [if not, create ranged soldier to protect food gatherers]
+
+(Stage 3) 
