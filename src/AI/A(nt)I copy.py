@@ -1,6 +1,7 @@
   # -*- coding: latin-1 -*-
 import random
 import sys
+import math
 sys.path.append("..")  #so other modules can be found in parent dir
 from Player import *
 from Constants import *
@@ -30,7 +31,7 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "Simple Food Gatherer")
+        super(AIPlayer,self).__init__(inputPlayerId, "A(nt)I COPY")
         #the coordinates of the agent's food and tunnel will be stored in these
         #variables (see getMove() below)
         self.myFood = None
@@ -39,33 +40,46 @@ class AIPlayer(Player):
     ##
     #getPlacement 
     #
-    # The agent uses a hardcoded arrangement for phase 1 to provide maximum
-    # protection to the queen.  Enemy food is placed randomly.
+    # The agent randomly selects section along back row to place hill and protects it with grass.
+    # Enemy food is placed as far away from the tunnel as possible.
     #
     def getPlacement(self, currentState):
         self.myFood = None
         self.myTunnel = None
         if currentState.phase == SETUP_PHASE_1:
-            return [(0,0), (5, 1), 
-                    (0,3), (1,2), (2,1), (3,0),
-                    (0,2), (1,1), (2,0),
-                    (0,1), (1,0) ]
-        elif currentState.phase == SETUP_PHASE_2:
-            numToPlace = 2
+            # 1) hill - somewhere on back line
+            # 2) worker tunnel - center of board
+            # 3-11) grass - few around hill, few at border from hill, one random
+            randNum = random.randint(1,8)
+            randCoords = (random.randint(0,9), random.randint(0,3))
+
+            moves = [(randNum,0), (5, 2), 
+                    (randNum-1, 0), (randNum+1, 0), (randNum, 1), (randNum+1,1), (randNum-1,1),
+                    (randNum,3), (randNum+1,3), (randNum-1,3)]
+            
+            while randCoords in moves:
+                randCoords = (random.randint(0,9), random.randint(0,3))
+
+            moves.append(randCoords)
+
+            return moves
+
+        elif currentState.phase == SETUP_PHASE_2: # place 2 food, make them as far away from enemy tunnel as possible
+            enemyTunnel = getConstrList(currentState, None, (TUNNEL,))[0]
+
+            # find all spots on enemy side of board that are empty
+            furthestCoords = []
+            for i in range(0, 10):
+                for j in range(6, 10):
+                    if currentState.board[i][j].constr == None:
+                        furthestCoords.append((i,j))
+
+            # sort spots by distance from enemy tunnel
+            furthestCoords.sort(key=lambda x: abs(enemyTunnel.coords[0] - x[0]) + abs(enemyTunnel.coords[1] - x[1]))
             moves = []
-            for i in range(0, numToPlace):
-                move = None
-                while move == None:
-                    #Choose any x location
-                    x = random.randint(0, 9)
-                    #Choose any y location on enemy side of the board
-                    y = random.randint(6, 9)
-                    #Set the move if this space is empty
-                    if currentState.board[x][y].constr == None and (x, y) not in moves:
-                        move = (x, y)
-                        #Just need to make the space non-empty. So I threw whatever I felt like in there.
-                        currentState.board[x][y].constr == True
-                moves.append(move)
+            # add the two furthest spots to the moves list
+            moves.append(furthestCoords[-1]) 
+            moves.append(furthestCoords[-2])
             return moves
         else:            
             return None  #should never happen
