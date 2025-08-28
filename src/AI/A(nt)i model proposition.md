@@ -1,5 +1,11 @@
 # Model Proposition
 
+
+RUN GAME ON CL- 
+python Game.py -2p -p Booger human -random Layout
+python Game.py -2p -p Booger "Simple Food Gatherer"
+python Game.py -self -p Booger
+
 OPTION 1 - hyper-aggressive food play - place grass all along border, tunnel in center, make extra worker off the bat, get 3+ workers, gather food extremely quickly while having ranged ant between food + tunnel to protect
 
 OPTION 2 - Get one extra food, have drone kill worker ants for opposing team right away, then grind food
@@ -19,6 +25,11 @@ Before every play, check if any worker ants exist - if not, make one
 First - gather food until you get 2
 If opposing side only has workers
 
+
+MORE IDEAS:
+
+If R_Soldier or Soldier is protecting workers, retreat drone
+If an ant is on my side, create soldier ant to protect queen/defend hill
 
 
 
