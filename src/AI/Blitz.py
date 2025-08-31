@@ -31,7 +31,7 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "AntBot9000")
+        super(AIPlayer,self).__init__(inputPlayerId, "Blitz") # Named due to it's blitzkrieg-esque gameplay
         #the coordinates of the agent's food and tunnel will be stored in these
         #variables (see getMove() below)
         self.myFood = None
@@ -171,7 +171,19 @@ class AIPlayer(Player):
                     return False
             return True
 
-
+        ##
+        # findSafeMoves
+        #
+        # Finds all safe moves for an ant to move to by checking if it is within enemy attack range.
+        #
+        # Parameters:
+        #   currentState - the current game state
+        #   ant - the ant to find safe moves for
+        #   enemyPlayerId - the id of the enemy player
+        #
+        # Returns:
+        #   A list of safe move coordinates
+        #
         def findSafeMoves(currentState, ant, enemyPlayerId):
             safeMoves = []
 
