@@ -117,7 +117,7 @@ class AIPlayer(Player):
         myDrones = getAntList(currentState, me, (DRONE,))
         myRangedSoldiers = getAntList(currentState, me, (R_SOLDIER,))
         mySoldiers = getAntList(currentState, me, (SOLDIER,))
-        self.attackMode = True # set to true for debugging
+        self.attackMode = False # set to true for debugging
 
 
         ##
@@ -171,6 +171,8 @@ class AIPlayer(Player):
         #   currentState - the current game state
         #   coords - the coordinates to check
         #   enemyPlayerId - the id of the enemy player
+        #   isAgressive - If false, checks if within movement range + attack range of enemy ants
+        #                 If true, only checks if within attack range of enemy ants
         #
         # Returns:
         #   True if the position is safe, False otherwise
@@ -198,7 +200,8 @@ class AIPlayer(Player):
         #   currentState - the current game state
         #   ant - the ant to find safe moves for
         #   enemyPlayerId - the id of the enemy player
-        #   isAgressive - Ignores be
+        #   isAgressive - If false, checks if within movement range + attack range of enemy ants
+        #                 If true, only checks if within attack range of enemy ants
         #
         # Returns:
         #   A list of safe move coordinates
@@ -245,7 +248,7 @@ class AIPlayer(Player):
         # --- START ATTACK MODE LOGIC ---
 
 
-        # If it seems the enemy will wil before us due to food gathering, switch to attack mode.
+        # If it seems the enemy will win before us due to food gathering, switch to attack mode.
         # Drone ants will throw caution to the wind and attack workers more aggressively.
         if enemyInv.foodCount == 8 and myInv.foodCount < 8:
             print("Attack mode activated")
@@ -264,10 +267,11 @@ class AIPlayer(Player):
             myAnts = getAntList(currentState, me, (SOLDIER, R_SOLDIER))
             print("Attacking with %d soldiers" % len(myAnts))
             for ant in myAnts:
+                print("Considering %s at %s, movement status: %s" % (ant.type, str(ant.coords), str(ant.hasMoved)))
                 if not (ant.hasMoved):
                     print("Moving %s at %s towards enemy queen" % (ant.type, str(ant.coords)))
-                    path = createPathToward(currentState, ant.coords, enemyQueen.coords, False)
-                    if path:
+                    path = createPathToward(currentState, ant.coords, enemyQueen.coords, UNIT_STATS[ant.type][MOVEMENT])
+                    if path and len(path) > 1:
                         print("Path found: %s" % str(path))
                         return Move(MOVE_ANT, path, None)
                     else:
@@ -403,9 +407,12 @@ class AIPlayer(Player):
             # Now move the queen into a safe position
             if not myQueen.hasMoved:
                 safeMoves = findSafeMoves(currentState, myQueen, enemyId, False)
+                random.shuffle(safeMoves)
                 for moves in safeMoves:
                     if getAntAt(currentState, moves) is None:
                         return Move(MOVE_ANT, moves, None)
+                # If no safe moves, attack in place
+                print("Queen has no safe moves, attacking in place")
                 return Move(MOVE_ANT, [myQueen.coords], None)
 
         
@@ -564,17 +571,19 @@ class AIPlayer(Player):
 
 
         # If a ranged soldier is on top of food, the anthill, or tunnel, move it
-        for soldier in myRangedSoldiers:
-            move = moveAway(currentState, soldier)
-            if move is not None:
-                return move
+        if not self.attackMode:
+            for soldier in myRangedSoldiers:
+                move = moveAway(currentState, soldier)
+                if move is not None:
+                    return move
         
-        # If a soldier is on top of food, the anthill, or tunnel, move it
-        for soldier in mySoldiers:
-            move = moveAway(currentState, soldier)
-            if move is not None:
-                return move
 
+        # If a soldier is on top of food, the anthill, or tunnel, move it
+        if not self.attackMode:
+            for soldier in mySoldiers:
+                move = moveAway(currentState, soldier)
+                if move is not None:
+                    return move
 
 
         # If a drone is on top of food, the anthill, or tunnel, move it
