@@ -35,9 +35,14 @@ class AIPlayer(Player):
         #the coordinates of the agent's food and tunnel will be stored in these
         #variables (see getMove() below)
         self.myFood = None
+        self.myFoods = None
         self.myTunnel = None
+        self.myHill = None
         self.previousQueenHealth = None
         self.previousHillHealth = None
+        self.foodCount = []
+        self.firstMove = True
+        # self.unstuckMoves = []
     
     ##
     #getPlacement 
@@ -50,6 +55,9 @@ class AIPlayer(Player):
         self.myFood = None
         self.myTunnel = None
         self.myHill = None
+        self.foodCount.append(getCurrPlayerInventory(currentState).foodCount)
+        self.firstMove = True
+        # self.unstuckMoves = []
 
         if currentState.phase == SETUP_PHASE_1:
             # 1) hill - somewhere on back line
@@ -109,7 +117,7 @@ class AIPlayer(Player):
 
 
         ##
-        # moveAway
+        # moveAway - HELPER
         #
         # Moves an ant away from food, tunnel, or anthill if it is on top of one.
         # If no adjacent position is available, move ant in place to attack.
@@ -125,17 +133,21 @@ class AIPlayer(Player):
         #
         def moveAway(currentState, ant):
             if not (ant.hasMoved):
-                illegalCoords = self.myFoods
+                illegalCoords = getConstrList(currentState, None, (FOOD,))
+                illegalCoords = [food.coords for food in illegalCoords]
                 illegalCoords.append(myHill.coords)
                 illegalCoords.append(self.myTunnel.coords)
                 if (ant.coords in illegalCoords):
+                    print("%s is on top of illegal coords, %s" % (ant.type, str(ant.coords)))
                     adjacent_coords = listReachableAdjacent(currentState, ant.coords, 
                                                             UNIT_STATS[ant.type][MOVEMENT], UNIT_STATS[ant.type][IGNORES_GRASS])
                     if adjacent_coords:
                         # Move to a random available position that's not illegal
                         random.shuffle(adjacent_coords)
                         for coord in adjacent_coords:
+                            # print("Checking %s" % str(coord))
                             if coord not in illegalCoords and getAntAt(currentState, coord) is None:
+                                # print("Moving to %s" % str(coord))
                                 return Move(MOVE_ANT, [ant.coords, coord], None)
                         # If no adjacent position is available, move ant in place to attack
                         return Move(MOVE_ANT, [ant.coords], None)
@@ -147,7 +159,7 @@ class AIPlayer(Player):
 
 
         ##
-        # isSafePosition
+        # isSafePosition - HELPER
         #
         # Checks if a position is safe for an ant to move to by checking if it is within enemy attack range.
         #
@@ -172,7 +184,7 @@ class AIPlayer(Player):
             return True
 
         ##
-        # findSafeMoves
+        # findSafeMoves - HELPER
         #
         # Finds all safe moves for an ant to move to by checking if it is within enemy attack range.
         #
@@ -207,8 +219,7 @@ class AIPlayer(Player):
             # filter out foods that are on enemy side of board
             self.myFoods = [food for food in foods if food.coords[1] < 5]
 
-            #find the most optimal path for food; find which route will be best for food gathering. Only do this once, 
-            # as it will use the computationally expensive stepsToReach() function.
+            #find the most optimal path for food
             if not foodPathFound:
                 foodPathFound = True
                 bestDistSoFar = 1000
@@ -221,12 +232,58 @@ class AIPlayer(Player):
                     if (dist < bestDistSoFar):
                         self.myFood = food
                         bestDistSoFar = dist
+        
+
+        # --- START ANT UNSTUCK LOGIC ---
+
+
+        # Check if it's been a few turns since the last time we've collected food;
+        # this is how we get ants unstuck if there happens to be a bunch of collisions.
+
+        # if self.unstuckMoves:
+        #     unstuckMove = self.unstuckMoves.pop(0)
+        #     try:
+        #         if (unstuckMove and unstuckMove.coordList and 
+        #             len(unstuckMove.coordList) >= 1 and
+        #             legalCoord(unstuckMove.coordList[0])):
                     
+        #             # Check if ant exists and hasn't moved
+        #             ant = getAntAt(currentState, unstuckMove.coordList[0])
+        #             if ant and ant.player == currentState.whoseTurn and not ant.hasMoved:
+        #                 return unstuckMove
+        #     except:
+                pass  # Skip invalid moves
+
+        if self.firstMove:
+            self.firstMove = False
+            self.foodCount.append(myInv.foodCount)
+
+            if len(self.foodCount) > 20:
+                if (self.foodCount[-1] == self.foodCount[-2] == self.foodCount[-3] == 
+                    self.foodCount[-4] == self.foodCount[-5]):
+                    print("Food count is the same for multiple turns in a row, getting ants unstuck")
+                    self.foodCount = [] # Reset food count list
+                    antList = getAntList(currentState, me, (WORKER, QUEEN, R_SOLDIER, DRONE, SOLDIER))
+                    random.shuffle(antList)
+                    for ant in antList:
+                        if not (ant.hasMoved):
+                            path = createPathToward(currentState, ant.coords, (9,2), 
+                                                    UNIT_STATS[ant.type][MOVEMENT])
+                            if path:
+                                return Move(MOVE_ANT, path, None)
+
+            elif len(self.foodCount) > 60:
+                self.foodCount = [] # don't let list grow infinitely
+
+
+        # --- END ANT UNSTUCK LOGIC ---
 
 
         #Move the queen off the anthill so we can build stuff
-        if (myQueen.coords == myHill.coords):
-            return Move(MOVE_ANT, [myQueen.coords, (myQueen.coords[0], myQueen.coords[1]-1)], None)
+        if not myQueen.hasMoved:
+            move = moveAway(currentState, myQueen)
+            if move is not None:
+                return move
 
         
         # --- START WORKER ANT LOGIC ---
@@ -276,26 +333,11 @@ class AIPlayer(Player):
             if not worker.hasMoved:
                 adjacentCoords = listReachableAdjacent(currentState, worker.coords, 
                                                        UNIT_STATS[WORKER][MOVEMENT], False)
+
                 if adjacentCoords:
+                    random.shuffle(adjacentCoords)
                     # Try to move away from other ants
-                    bestMove = None
-                    minAntsNearby = 1000
-                    
-                    for coord in adjacentCoords:
-                        # Count nearby ants at this potential position
-                        nearbyAnts = 0
-                        for otherWorker in myWorkers: 
-                            if otherWorker != worker:
-                                dist = approxDist(coord, otherWorker.coords)
-                                if dist <= 2:  # Within 2 spaces
-                                    nearbyAnts += 1
-                        
-                        if nearbyAnts < minAntsNearby:
-                            minAntsNearby = nearbyAnts
-                            bestMove = coord
-                    
-                    if bestMove:
-                        return Move(MOVE_ANT, [worker.coords, bestMove], None)
+                    return Move(MOVE_ANT, [worker.coords, adjacentCoords[0]], None)
                     
 
         # --- END WORKER ANT LOGIC ---
@@ -307,8 +349,10 @@ class AIPlayer(Player):
         # Check if queen was attacked, create a soldier to protect her if no soldier exists; 
         # otherwise move the soldier to protect her
         if self.previousQueenHealth is not None and myQueen.health < self.previousQueenHealth:
+            print("Queen was attacked")
             if myInv.foodCount > 1:
                 if len(getAntList(currentState, me, (SOLDIER,))) == 0 and getAntAt(currentState, myHill.coords) is None:
+                    print("Building soldier at hill")
                     return Move(BUILD, [myHill.coords], SOLDIER)
                 else:
                     if len(getAntList(currentState, me, (SOLDIER,))) != 0:
@@ -316,14 +360,10 @@ class AIPlayer(Player):
                         soldier = getAntList(currentState, me, (SOLDIER,))[0]
                         if not (soldier.hasMoved):
                             # Try multiple positions around the queen to find a valid target
-                            potential_targets = [
-                                (myQueen.coords[0]-1, myQueen.coords[1]),
-                                (myQueen.coords[0]+1, myQueen.coords[1]),
-                                (myQueen.coords[0], myQueen.coords[1]-1),
-                                (myQueen.coords[0], myQueen.coords[1]+1)
-                            ]
-                            
-                            for target in potential_targets:
+                            potentialTargets = listAdjacent(myQueen.coords)
+                            random.shuffle(potentialTargets)
+
+                            for target in potentialTargets:
                                 if legalCoord(target) and getAntAt(currentState, target) is None and target != soldier.coords:
                                     path = createPathToward(currentState, soldier.coords, target, UNIT_STATS[SOLDIER][MOVEMENT])
                                     if path and len(path) > 1:
@@ -334,6 +374,7 @@ class AIPlayer(Player):
         
         # Update previous health
         self.previousQueenHealth = myQueen.health
+        # print("Queen health: %d" % myQueen.health)
 
 
         # --- END QUEEN DEFENSE LOGIC ---
@@ -350,14 +391,11 @@ class AIPlayer(Player):
                 for ant in myAnts:
                     if not (ant.hasMoved):
                         # Try multiple positions around the hill to find a valid target
-                        potential_targets = [
-                            (myHill.coords[0]-1, myHill.coords[1]),
-                            (myHill.coords[0]+1, myHill.coords[1]),
-                            (myHill.coords[0], myHill.coords[1]-1),
-                            (myHill.coords[0], myHill.coords[1]+1)
-                        ]
+                        potentialTargets = listAdjacent(myHill.coords)
+                        potentialTargets.append(myHill.coords)
+                        random.shuffle(potentialTargets)
                         
-                        for target in potential_targets:
+                        for target in potentialTargets:
                             if legalCoord(target) and target != ant.coords:
                                 path = createPathToward(currentState, ant.coords, target, UNIT_STATS[ant.type][MOVEMENT])
                                 if path and len(path) > 1:
@@ -402,10 +440,10 @@ class AIPlayer(Player):
         #         enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
         #         if enemyWorkers:
         #             # Target the closest enemy worker
-        #             closest_worker = min(enemyWorkers, 
+        #             closestWorker = min(enemyWorkers, 
         #                                 key=lambda w: approxDist(drone.coords, w.coords))
         #             path = createPathToward(currentState, drone.coords,
-        #                               closest_worker.coords, UNIT_STATS[DRONE][MOVEMENT])
+        #                               closestWorker.coords, UNIT_STATS[DRONE][MOVEMENT])
         #             if path and len(path) > 1:
         #                 return Move(MOVE_ANT, path, None)
         #         else:
@@ -472,35 +510,29 @@ class AIPlayer(Player):
                 workers = [x for x in getAntList(currentState, me, (WORKER,))]
                 
                 if workers:
-                    closestWorker = min(workers, 
-                                       key=lambda w: approxDist(soldier.coords, w.coords))
+                    closestWorker = min(workers, key=lambda w: approxDist(soldier.coords, w.coords))
                     
-                    # Try multiple positions adjacent to the worker to find a valid one
-                    potential_targets = [
-                        (closestWorker.coords[0]+1, closestWorker.coords[1]),
-                        (closestWorker.coords[0]-1, closestWorker.coords[1]),
-                        (closestWorker.coords[0], closestWorker.coords[1]+1),
-                        (closestWorker.coords[0], closestWorker.coords[1]-1)
-                    ]
-                    
-                    for target in potential_targets:
+                    # Find positions adjacent to the closest worker
+                    potentialTargets = listAdjacent(closestWorker.coords)
+                    random.shuffle(potentialTargets)
+                    foodCoords = [x.coords for x in self.myFoods]
+
+                    for target in potentialTargets:
                         # Check if target is valid and not occupied
-                        if (legalCoord(target) and getAntAt(currentState, target) is None 
-                            and target != soldier.coords):
+                        if (legalCoord(target) and getAntAt(currentState, target) is None
+                            and target != soldier.coords and target not in foodCoords):
                             path = createPathToward(currentState, soldier.coords, target, UNIT_STATS[R_SOLDIER][MOVEMENT])
                             if path and len(path) > 1:
                                 return Move(MOVE_ANT, path, None)
                             break
                 else:
-                    # No workers, default to protecting hill with valid coordinates
-                    potential_targets = [
-                        (myHill.coords[0], myHill.coords[1]+1),
-                        (myHill.coords[0], myHill.coords[1]-1),
-                        (myHill.coords[0]+1, myHill.coords[1]),
-                        (myHill.coords[0]-1, myHill.coords[1])
-                    ]
+                    # No workers, default to protecting hill
+                    potentialTargets = listAdjacent(myHill.coords)
+                    potentialTargets.append(myHill.coords)
+
+                    random.shuffle(potentialTargets)
                     
-                    for target in potential_targets:
+                    for target in potentialTargets:
                         # Check if target is valid and not occupied
                         if (legalCoord(target) and getAntAt(currentState, target) is None 
                             and target != soldier.coords):
@@ -523,12 +555,6 @@ class AIPlayer(Player):
                 return move
 
 
-        #Move the queen off of food if she's on it
-        move = moveAway(currentState, myQueen)
-        if move is not None:
-            return move
-
-
         # If a drone is on top of food, the anthill, or tunnel, move it
         for drone in myDrones:
             move = moveAway(currentState, drone)
@@ -537,6 +563,7 @@ class AIPlayer(Player):
 
 
         #If no actions are available, end the turn
+        self.firstMove = True
         return Move(END, None, None)
 
 
