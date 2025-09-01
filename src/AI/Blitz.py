@@ -117,7 +117,8 @@ class AIPlayer(Player):
         myDrones = getAntList(currentState, me, (DRONE,))
         myRangedSoldiers = getAntList(currentState, me, (R_SOLDIER,))
         mySoldiers = getAntList(currentState, me, (SOLDIER,))
-        self.attackMode = False # set to true for debugging
+        myWorkers = getAntList(currentState, me, (WORKER,))
+        # self.attackMode = False # set to true for debugging
 
 
         ##
@@ -249,8 +250,12 @@ class AIPlayer(Player):
 
         # If it seems the enemy will win before us due to food gathering, switch to attack mode.
         # Drone ants will throw caution to the wind and attack workers more aggressively.
-        if enemyInv.foodCount == 8 and myInv.foodCount < 8:
+        if enemyInv.foodCount > 6 and myInv.foodCount < 5 or enemyInv.foodCount > 8 and myInv.foodCount < 7:
             print("Attack mode activated")
+            self.attackMode = True
+
+        if myInv.foodCount == 0 and len(myWorkers) == 0:
+            print("Desperation attack mode activated")
             self.attackMode = True
 
 
@@ -276,6 +281,10 @@ class AIPlayer(Player):
                     else:
                         print("No path found, attacking in place")
                         return Move(MOVE_ANT, [ant.coords], None)
+        # else:
+        #     # disable attack mode if gap is closed - maybe enabe tin future?
+        #     self.attackMode = False
+
 
 
         # --- END ATTACK MODE LOGIC ---
@@ -329,6 +338,19 @@ class AIPlayer(Player):
             # Check if anthill is clear
             if getAntAt(currentState, myHill.coords) is None:
                 return Move(BUILD, [myHill.coords], WORKER)
+
+
+        # Check if workers are in danger; move them for safety if so - TODO: NOT WORKING RIGHT NOW
+        # for worker in myWorkers:
+        #     if not (worker.hasMoved):
+        #         if not isSafePosition(currentState, worker.coords, enemyId, False):
+        #             print("Worker at %s is in danger" % str(worker.coords))
+        #             safeMoves = findSafeMoves(currentState, worker, enemyId, False)
+        #             random.shuffle(safeMoves)
+        #             for move in safeMoves:
+        #                 print("Worker at %s is in danger, moving to %s" % (str(worker.coords), str(move)))
+        #                 if getAntAt(currentState, move) is None:
+        #                     return Move(MOVE_ANT, [worker.coords, move], None)
 
         
         # Prioritize workers carrying food first (they need to get to tunnel)
@@ -415,9 +437,9 @@ class AIPlayer(Player):
             if not myQueen.hasMoved:
                 safeMoves = findSafeMoves(currentState, myQueen, enemyId, False)
                 random.shuffle(safeMoves)
-                for moves in safeMoves:
-                    if getAntAt(currentState, moves) is None:
-                        return Move(MOVE_ANT, moves, None)
+                for move in safeMoves:
+                    if getAntAt(currentState, move) is None:
+                        return Move(MOVE_ANT, [myQueen.coords, move], None)
                 # If no safe moves, attack in place
                 print("Queen has no safe moves, attacking in place")
                 return Move(MOVE_ANT, [myQueen.coords], None)
