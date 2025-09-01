@@ -117,7 +117,7 @@ class AIPlayer(Player):
         myDrones = getAntList(currentState, me, (DRONE,))
         myRangedSoldiers = getAntList(currentState, me, (R_SOLDIER,))
         mySoldiers = getAntList(currentState, me, (SOLDIER,))
-        self.attackMode = False
+        self.attackMode = True # set to true for debugging
 
 
         ##
@@ -175,11 +175,13 @@ class AIPlayer(Player):
         # Returns:
         #   True if the position is safe, False otherwise
         #
-        def isSafePosition(currentState, coords, enemyPlayerId):
+        def isSafePosition(currentState, coords, enemyPlayerId, isAgressive):
             enemyAnts = getAntList(currentState, enemyPlayerId, (DRONE,SOLDIER,R_SOLDIER,QUEEN))
             for enemyAnt in enemyAnts:
                 # Enemy range is the sum of their range and movement, as they can move before attacking
-                enemyRange = UNIT_STATS[enemyAnt.type][RANGE] + UNIT_STATS[enemyAnt.type][MOVEMENT]
+                enemyRange = UNIT_STATS[enemyAnt.type][RANGE]
+                if not isAgressive:
+                    enemyRange = enemyRange + UNIT_STATS[enemyAnt.type][MOVEMENT]
                 distance = approxDist(coords, enemyAnt.coords)
 
                 # If within enemy attack range, return false
@@ -196,11 +198,12 @@ class AIPlayer(Player):
         #   currentState - the current game state
         #   ant - the ant to find safe moves for
         #   enemyPlayerId - the id of the enemy player
+        #   isAgressive - Ignores be
         #
         # Returns:
         #   A list of safe move coordinates
         #
-        def findSafeMoves(currentState, ant, enemyPlayerId):
+        def findSafeMoves(currentState, ant, enemyPlayerId, isAgressive):
             safeMoves = []
 
             possiblePaths = listAllMovementPaths(currentState, ant.coords, 
@@ -208,7 +211,7 @@ class AIPlayer(Player):
             for path in possiblePaths:
                 if len(path) > 0:
                     finalCoord = path[-1]  # Get the last coordinate in the path
-                    if isSafePosition(currentState, finalCoord, enemyPlayerId):
+                    if isSafePosition(currentState, finalCoord, enemyPlayerId, isAgressive):
                         safeMoves.append(finalCoord)
             return safeMoves
 
@@ -242,9 +245,9 @@ class AIPlayer(Player):
         # --- START ATTACK MODE LOGIC ---
 
 
-        # If the food disparity between me and enemy is greater than 6, set attack mode
-        # Attack mode goes all in: build soldiers with all food and move towards enemy queen
-        if enemyInv.foodCount - myInv.foodCount > 6:
+        # If it seems the enemy will wil before us due to food gathering, switch to attack mode.
+        # Drone ants will throw caution to the wind and attack workers more aggressively.
+        if enemyInv.foodCount == 8 and myInv.foodCount < 8:
             print("Attack mode activated")
             self.attackMode = True
 
@@ -256,14 +259,19 @@ class AIPlayer(Player):
             
             # Move towards enemy queen with all units
             enemyQueen = getAntList(currentState, enemyId, (QUEEN,))[0]
+            print("Enemy queen at %s" % str(enemyQueen.coords))
 
-            myAnts = getAntList(currentState, me, (SOLDIER, R_SOLDIER, DRONE))
+            myAnts = getAntList(currentState, me, (SOLDIER, R_SOLDIER))
+            print("Attacking with %d soldiers" % len(myAnts))
             for ant in myAnts:
                 if not (ant.hasMoved):
-                    path = createPathToward(currentState, ant.coords, enemyQueen.coords, UNIT_STATS[ant.type][MOVEMENT])
-                    if path and len(path) > 1:
+                    print("Moving %s at %s towards enemy queen" % (ant.type, str(ant.coords)))
+                    path = createPathToward(currentState, ant.coords, enemyQueen.coords, False)
+                    if path:
+                        print("Path found: %s" % str(path))
                         return Move(MOVE_ANT, path, None)
                     else:
+                        print("No path found, attacking in place")
                         return Move(MOVE_ANT, [ant.coords], None)
 
 
@@ -394,7 +402,7 @@ class AIPlayer(Player):
         
             # Now move the queen into a safe position
             if not myQueen.hasMoved:
-                safeMoves = findSafeMoves(currentState, myQueen, enemyId)
+                safeMoves = findSafeMoves(currentState, myQueen, enemyId, False)
                 for moves in safeMoves:
                     if getAntAt(currentState, moves) is None:
                         return Move(MOVE_ANT, moves, None)
@@ -467,7 +475,7 @@ class AIPlayer(Player):
                 enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
                 
                 # Find safe moves for the drone
-                safeMoves = findSafeMoves(currentState, drone, enemyId)
+                safeMoves = findSafeMoves(currentState, drone, enemyId, self.attackMode)
                 
                 if enemyWorkers and safeMoves:
                     # Target the closest enemy worker, but only move to safe positions
