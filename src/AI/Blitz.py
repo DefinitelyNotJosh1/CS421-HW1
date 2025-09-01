@@ -1,3 +1,7 @@
+# AUTHOR: Joshua Krasnogorov
+# HW1 for CS-421.
+# Used FoodGatherer.py as a starting point.
+
   # -*- coding: latin-1 -*-
 import random
 import sys
@@ -42,7 +46,7 @@ class AIPlayer(Player):
         self.previousHillHealth = None
         self.foodCount = []
         self.firstMove = True
-        # self.unstuckMoves = []
+        self.attackMode = False
     
     ##
     #getPlacement 
@@ -57,12 +61,9 @@ class AIPlayer(Player):
         self.myHill = None
         self.foodCount.append(getCurrPlayerInventory(currentState).foodCount)
         self.firstMove = True
-        # self.unstuckMoves = []
+        self.attackMode = False
 
         if currentState.phase == SETUP_PHASE_1:
-            # 1) hill - somewhere on back line
-            # 2) worker tunnel - center of board
-            # 3-11) grass - few around hill, few at border from hill, one random
 
             moves = [(2,1), (7, 2), 
                     (9,3), (8, 3), (7, 3), (6,3), (5, 3),
@@ -96,7 +97,7 @@ class AIPlayer(Player):
     ##
     #getMove
     #
-    # This agent gathers food, sabatoges food collection, and builds drones and ranged soldiers to protect the tunnel.
+    # This agent gathers food quickly, sabatoges enemy food collection, and protects its queen and hill.
     #
     # Parameters:
     #   currentState - the current game state
@@ -108,12 +109,15 @@ class AIPlayer(Player):
         #Useful pointers
         myInv = getCurrPlayerInventory(currentState)
         me = currentState.whoseTurn
+        enemyInv = getEnemyInv(me, currentState)
         enemyId = 1 - me
         myQueen = myInv.getQueen()
         foodPathFound = False
         myHill = myInv.getAnthill()
         myDrones = getAntList(currentState, me, (DRONE,))
         myRangedSoldiers = getAntList(currentState, me, (R_SOLDIER,))
+        mySoldiers = getAntList(currentState, me, (SOLDIER,))
+        self.attackMode = False
 
 
         ##
@@ -138,7 +142,7 @@ class AIPlayer(Player):
                 illegalCoords.append(myHill.coords)
                 illegalCoords.append(self.myTunnel.coords)
                 if (ant.coords in illegalCoords):
-                    print("%s is on top of illegal coords, %s" % (ant.type, str(ant.coords)))
+                    # print("%s is on top of illegal coords, %s" % (ant.type, str(ant.coords)))
                     adjacent_coords = listReachableAdjacent(currentState, ant.coords, 
                                                             UNIT_STATS[ant.type][MOVEMENT], UNIT_STATS[ant.type][IGNORES_GRASS])
                     if adjacent_coords:
@@ -232,6 +236,38 @@ class AIPlayer(Player):
                     if (dist < bestDistSoFar):
                         self.myFood = food
                         bestDistSoFar = dist
+
+
+
+        # --- START ATTACK MODE LOGIC ---
+
+
+        # If the food disparity between me and enemy is greater than 6, set attack mode
+        # Attack mode goes all in: build soldiers with all food and move towards enemy queen
+        if enemyInv.foodCount - myInv.foodCount > 6:
+            print("Attack mode activated")
+            self.attackMode = True
+
+
+        if self.attackMode:
+            # Build soldiers with all food
+            if myInv.foodCount > 1 and getAntAt(currentState, myHill.coords) is None:
+                return Move(BUILD, [myHill.coords], SOLDIER)
+            
+            # Move towards enemy queen with all units
+            enemyQueen = getAntList(currentState, enemyId, (QUEEN,))[0]
+
+            myAnts = getAntList(currentState, me, (SOLDIER, R_SOLDIER, DRONE))
+            for ant in myAnts:
+                if not (ant.hasMoved):
+                    path = createPathToward(currentState, ant.coords, enemyQueen.coords, UNIT_STATS[ant.type][MOVEMENT])
+                    if path and len(path) > 1:
+                        return Move(MOVE_ANT, path, None)
+                    else:
+                        return Move(MOVE_ANT, [ant.coords], None)
+
+
+        # --- END ATTACK MODE LOGIC ---
         
 
         # --- START ANT UNSTUCK LOGIC ---
@@ -240,20 +276,6 @@ class AIPlayer(Player):
         # Check if it's been a few turns since the last time we've collected food;
         # this is how we get ants unstuck if there happens to be a bunch of collisions.
 
-        # if self.unstuckMoves:
-        #     unstuckMove = self.unstuckMoves.pop(0)
-        #     try:
-        #         if (unstuckMove and unstuckMove.coordList and 
-        #             len(unstuckMove.coordList) >= 1 and
-        #             legalCoord(unstuckMove.coordList[0])):
-                    
-        #             # Check if ant exists and hasn't moved
-        #             ant = getAntAt(currentState, unstuckMove.coordList[0])
-        #             if ant and ant.player == currentState.whoseTurn and not ant.hasMoved:
-        #                 return unstuckMove
-        #     except:
-                pass  # Skip invalid moves
-
         if self.firstMove:
             self.firstMove = False
             self.foodCount.append(myInv.foodCount)
@@ -261,15 +283,16 @@ class AIPlayer(Player):
             if len(self.foodCount) > 20:
                 if (self.foodCount[-1] == self.foodCount[-2] == self.foodCount[-3] == 
                     self.foodCount[-4] == self.foodCount[-5]):
-                    print("Food count is the same for multiple turns in a row, getting ants unstuck")
+                    # print("Food count is the same for multiple turns in a row, getting ants unstuck")
                     self.foodCount = [] # Reset food count list
                     antList = getAntList(currentState, me, (WORKER, QUEEN, R_SOLDIER, DRONE, SOLDIER))
                     random.shuffle(antList)
                     for ant in antList:
                         if not (ant.hasMoved):
-                            path = createPathToward(currentState, ant.coords, (9,2), 
+                            randomCoord = (random.randint(0, 9), random.randint(0, 3))
+                            path = createPathToward(currentState, ant.coords, randomCoord, 
                                                     UNIT_STATS[ant.type][MOVEMENT])
-                            if path:
+                            if path and len(path) > 1:
                                 return Move(MOVE_ANT, path, None)
 
             elif len(self.foodCount) > 60:
@@ -354,23 +377,29 @@ class AIPlayer(Player):
                 if len(getAntList(currentState, me, (SOLDIER,))) == 0 and getAntAt(currentState, myHill.coords) is None:
                     print("Building soldier at hill")
                     return Move(BUILD, [myHill.coords], SOLDIER)
-                else:
-                    if len(getAntList(currentState, me, (SOLDIER,))) != 0:
-                        # Move the soldier to protect the queen
-                        soldier = getAntList(currentState, me, (SOLDIER,))[0]
-                        if not (soldier.hasMoved):
-                            # Try multiple positions around the queen to find a valid target
-                            potentialTargets = listAdjacent(myQueen.coords)
-                            random.shuffle(potentialTargets)
 
-                            for target in potentialTargets:
-                                if legalCoord(target) and getAntAt(currentState, target) is None and target != soldier.coords:
-                                    path = createPathToward(currentState, soldier.coords, target, UNIT_STATS[SOLDIER][MOVEMENT])
-                                    if path and len(path) > 1:
-                                        return Move(MOVE_ANT, path, None)
-                            
-                            # If no movement possible, attack in place
-                            return Move(MOVE_ANT, [soldier.coords], None)
+            if len(mySoldiers) != 0:
+                # Move the soldier to attack closest enemy ant to queen
+                for soldier in mySoldiers:
+                    if not (soldier.hasMoved):
+                        enemyAnts = getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER,QUEEN))
+                        closestEnemy = min(enemyAnts, key=lambda x: approxDist(myQueen.coords, x.coords))
+
+                        path = createPathToward(currentState, soldier.coords, closestEnemy.coords, UNIT_STATS[SOLDIER][MOVEMENT])
+                        if path and len(path) > 1:
+                            return Move(MOVE_ANT, path, None)
+                        
+                        # move in place otherwise
+                        return Move(MOVE_ANT, [soldier.coords], None)
+        
+            # Now move the queen into a safe position
+            if not myQueen.hasMoved:
+                safeMoves = findSafeMoves(currentState, myQueen, enemyId)
+                for moves in safeMoves:
+                    if getAntAt(currentState, moves) is None:
+                        return Move(MOVE_ANT, moves, None)
+                return Move(MOVE_ANT, [myQueen.coords], None)
+
         
         # Update previous health
         self.previousQueenHealth = myQueen.health
@@ -424,6 +453,7 @@ class AIPlayer(Player):
 
         
         # --- START DRONE LOGIC ---
+        # TODO: MAKE DRONES ATTACK IF THEY WON'T DIE FROM ATTACKER (DRONE OR R_SOLDIER)
 
 
         # If I don't have a drone, build one, make sure hill is not occupied
@@ -431,30 +461,6 @@ class AIPlayer(Player):
         and getAntAt(currentState, myHill.coords) is None):
             return Move(BUILD, [myHill.coords], DRONE)
 
-
-        # MY OLD CODE - WORKS, BUT LETS MAKE IT BETTER
-        # Move my drone toward enemy workers while avoiding enemies
-        # for drone in myDrones:
-        #     if not (drone.hasMoved):
-        #         # Or target enemy workers specifically
-        #         enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
-        #         if enemyWorkers:
-        #             # Target the closest enemy worker
-        #             closestWorker = min(enemyWorkers, 
-        #                                 key=lambda w: approxDist(drone.coords, w.coords))
-        #             path = createPathToward(currentState, drone.coords,
-        #                               closestWorker.coords, UNIT_STATS[DRONE][MOVEMENT])
-        #             if path and len(path) > 1:
-        #                 return Move(MOVE_ANT, path, None)
-        #         else:
-        #             # No enemy workers, retreat to (5,3)
-        #             retreatTarget = (5, 3)
-        #             if legalCoord(retreatTarget):
-        #                 path = createPathToward(currentState, drone.coords,
-        #                                       retreatTarget, UNIT_STATS[DRONE][MOVEMENT])
-        #                 if path and len(path) > 1:
-        #                     return Move(MOVE_ANT, path, None)
-        # END MY OLD CODE
         for drone in myDrones:
             if not (drone.hasMoved):
                 # Get enemy workers
@@ -497,8 +503,9 @@ class AIPlayer(Player):
         # --- START RANGED SOLDIER LOGIC ---
 
 
-        # Make a ranged soldier
-        if (len(getAntList(currentState, me, (R_SOLDIER,))) == 0 and myInv.foodCount > 1 
+        # Make a ranged soldier if enemy has ants other than workers and a queen
+        if (len(getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))) > 0 and 
+        len(getAntList(currentState, me, (R_SOLDIER,))) == 0 and myInv.foodCount > 1 
         and getAntAt(currentState, myHill.coords) is None):
             return Move(BUILD, [myHill.coords], R_SOLDIER)
 
@@ -545,14 +552,21 @@ class AIPlayer(Player):
         # --- END RANGED SOLDIER LOGIC ---
   
    
-        # --- START CLEANUP LOGIC ---
+        # --- START CLEANUP ---
 
 
-        # If the ranged soldier is on top of food, the anthill, or tunnel, move it
+        # If a ranged soldier is on top of food, the anthill, or tunnel, move it
         for soldier in myRangedSoldiers:
             move = moveAway(currentState, soldier)
             if move is not None:
                 return move
+        
+        # If a soldier is on top of food, the anthill, or tunnel, move it
+        for soldier in mySoldiers:
+            move = moveAway(currentState, soldier)
+            if move is not None:
+                return move
+
 
 
         # If a drone is on top of food, the anthill, or tunnel, move it
@@ -567,7 +581,7 @@ class AIPlayer(Player):
         return Move(END, None, None)
 
 
-        # --- END CLEANUP LOGIC ---
+        # --- END CLEANUP ---
     
     
     
