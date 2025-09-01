@@ -244,7 +244,6 @@ class AIPlayer(Player):
                         bestDistSoFar = dist
 
 
-
         # --- START ATTACK MODE LOGIC ---
 
 
@@ -375,6 +374,14 @@ class AIPlayer(Player):
                     return Move(MOVE_ANT, [worker.coords, adjacentCoords[0]], None)
                     
 
+        # End my turn if I'm about to win; don't build anything
+        if myInv.foodCount > 10:
+            myAnts = getAntList(currentState, me, (QUEEN, R_SOLDIER, DRONE, SOLDIER))
+            for ant in myAnts:
+                if not (ant.hasMoved):
+                    move = moveAway(currentState, ant)
+            return Move(END, None, None)
+        
         # --- END WORKER ANT LOGIC ---
 
 
