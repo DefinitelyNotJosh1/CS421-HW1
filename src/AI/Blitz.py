@@ -341,6 +341,8 @@ class AIPlayer(Player):
 
 
         # Check if workers are in danger; move them for safety if so - TODO: NOT WORKING RIGHT NOW
+
+
         # for worker in myWorkers:
         #     if not (worker.hasMoved):
         #         if not isSafePosition(currentState, worker.coords, enemyId, False):
@@ -404,6 +406,7 @@ class AIPlayer(Player):
                     move = moveAway(currentState, ant)
             return Move(END, None, None)
         
+
         # --- END WORKER ANT LOGIC ---
 
 
