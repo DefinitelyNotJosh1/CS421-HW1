@@ -252,12 +252,12 @@ class AIPlayer(Player):
 
         # If it seems the enemy will win before us due to food gathering, switch to attack mode.
         # Drone ants will throw caution to the wind and attack workers more aggressively.
-        if enemyInv.foodCount > 6 and myInv.foodCount < 5 or enemyInv.foodCount > 8 and myInv.foodCount < 7:
-            print("Attack mode activated")
+        if enemyInv.foodCount > 5 and myInv.foodCount < 5 or enemyInv.foodCount > 8 and myInv.foodCount < 7:
+            print("Attack mode activated, my food count: %d, enemy food count: %d" % (myInv.foodCount, enemyInv.foodCount))
             self.attackMode = True
 
         if myInv.foodCount == 0 and len(myWorkers) == 0:
-            print("Desperation attack mode activated")
+            print("attack mode activated, no more workers")
             self.attackMode = True
 
 
@@ -284,9 +284,8 @@ class AIPlayer(Player):
                         print("No path found, attacking in place")
                         return Move(MOVE_ANT, [ant.coords], None)
         # else:
-        #     # disable attack mode if gap is closed - maybe enabe tin future?
+        #     # disable attack mode if gap is closed - maybe enabe in future?
         #     self.attackMode = False
-
 
 
         # --- END ATTACK MODE LOGIC ---
@@ -324,8 +323,21 @@ class AIPlayer(Player):
         # --- END ANT UNSTUCK LOGIC ---
 
 
-        #Move the queen off the anthill so we can build stuff
+        #Move the queen off the anthill so we can build stuff - unless an enemy ant is in range and on our side of the board
         if not myQueen.hasMoved:
+            # First check if there are any enemy drones in attack range
+            enemyAnts = getAntList(currentState, enemyId, (DRONE, SOLDIER,))
+            if enemyAnts:
+                for enemyDrone in enemyAnts:
+                    distance = approxDist(myQueen.coords, enemyDrone.coords)
+                    if distance <= UNIT_STATS[QUEEN][RANGE] + UNIT_STATS[QUEEN][MOVEMENT]:
+                        # Attack the enemy drone if it's in range
+                        path = createPathToward(currentState, myQueen.coords, enemyDrone.coords, UNIT_STATS[QUEEN][MOVEMENT])
+                        if path and len(path) > 1:
+                            return Move(MOVE_ANT, path, None)
+                        else:
+                            return Move(MOVE_ANT, [myQueen.coords], None)
+            
             move = moveAway(currentState, myQueen)
             if move is not None:
                 return move
@@ -334,27 +346,33 @@ class AIPlayer(Player):
         # --- START WORKER ANT LOGIC ---
 
 
-        #Build another worker
+        #Build another worker if i have a drone
         myWorkers = getAntList(currentState, me, (WORKER,))
-        if (len(myWorkers) < 2 and myInv.foodCount > 0):
-            # Check if anthill is clear
-            if getAntAt(currentState, myHill.coords) is None:
+        if (len(myWorkers) == 1 and myInv.foodCount > 0 and len(getAntList(currentState, me, (DRONE,))) > 0):
+            # Check if anthill is clear and make sure no enemy ants are on our side; don't waste food if they are
+            if getAntAt(currentState, myHill.coords) is None and isSafePosition(currentState, myHill.coords, enemyId, True):
+                return Move(BUILD, [myHill.coords], WORKER)
+
+        # If I don't have any workers, build one if it's safe
+        if (len(myWorkers) == 0 and myInv.foodCount > 0):
+            if getAntAt(currentState, myHill.coords) is None and isSafePosition(currentState, myHill.coords, enemyId, True):
+                print("No food, building worker")
                 return Move(BUILD, [myHill.coords], WORKER)
 
 
-        # Check if workers are in danger; move them for safety if so - TODO: NOT WORKING RIGHT NOW
+        # Check if workers are in danger; move them for safety if so
+        for worker in myWorkers:
+            if not (worker.hasMoved):
+                enemyDrones = getAntList(currentState, enemyId, (DRONE,))
+                # If enemy is attempting to attack with a drone right away, save the worker
+                if not isSafePosition(currentState, worker.coords, enemyId, False) or (len(enemyDrones) > 0 and myInv.foodCount < 3):
+                    path = createPathToward(currentState, worker.coords, myQueen.coords, UNIT_STATS[WORKER][MOVEMENT])
+                    if path and len(path) > 1:
+                        return Move(MOVE_ANT, path, None)
+                    else:
+                        return Move(MOVE_ANT, [worker.coords], None)
 
 
-        # for worker in myWorkers:
-        #     if not (worker.hasMoved):
-        #         if not isSafePosition(currentState, worker.coords, enemyId, False):
-        #             print("Worker at %s is in danger" % str(worker.coords))
-        #             safeMoves = findSafeMoves(currentState, worker, enemyId, False)
-        #             random.shuffle(safeMoves)
-        #             for move in safeMoves:
-        #                 print("Worker at %s is in danger, moving to %s" % (str(worker.coords), str(move)))
-        #                 if getAntAt(currentState, move) is None:
-        #                     return Move(MOVE_ANT, [worker.coords, move], None)
 
         
         # Prioritize workers carrying food first (they need to get to tunnel)
@@ -489,29 +507,55 @@ class AIPlayer(Player):
         # --- END HILL DEFENSE LOGIC ---
 
 
-        # If enemy has no ants but workers, build a drone first.
-        # If enemy has ants, build a ranged soldier first for protection
-        if len(getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))) == 0:
-            if (len(getAntList(currentState, me, (DRONE,))) == 0 and myInv.foodCount > 1 
+        # Build a drone first, maximum harassment
+        if (len(getAntList(currentState, me, (DRONE,))) == 0 and myInv.foodCount > 2 
             and getAntAt(currentState, myHill.coords) is None):
                 return Move(BUILD, [myHill.coords], DRONE)
         else:
-            if (len(getAntList(currentState, me, (R_SOLDIER,))) == 0 and myInv.foodCount > 1 
+            # TRIAL - MAKE RANGED SOLDIER JUST SOLDIER INSTEAD - MARKING WITH COMMENT R_S to S
+            if (len(getAntList(currentState, me, (SOLDIER,))) == 0 and myInv.foodCount > 2 
         and getAntAt(currentState, myHill.coords) is None):
-                return Move(BUILD, [myHill.coords], R_SOLDIER)
+                return Move(BUILD, [myHill.coords], SOLDIER)
 
         
         # --- START DRONE LOGIC ---
         # TODO: MAKE DRONES ATTACK IF THEY WON'T DIE FROM ATTACKER (DRONE OR R_SOLDIER)
 
-
-        # If I don't have a drone, build one, make sure hill is not occupied
-        if (len(getAntList(currentState, me, (DRONE,))) == 0 and myInv.foodCount > 1 
-        and getAntAt(currentState, myHill.coords) is None):
-            return Move(BUILD, [myHill.coords], DRONE)
-
         for drone in myDrones:
             if not (drone.hasMoved):
+                # First check if enemy has a drone - if they do, attack it, make sure I win
+                # (I can guarantee I win if I attack first)
+                # When attacking a drone, stay outside of the range of the other enemy's ants
+                enemyAnts = getAntList(currentState, enemyId, (QUEEN, SOLDIER, R_SOLDIER))
+                enemyDrones = getAntList(currentState, enemyId, (DRONE,))
+                if enemyDrones:
+                    print("Enemy has a drone, attacking")
+                    for enemyDrone in enemyDrones:
+                        if approxDist(drone.coords, enemyDrone.coords) <= UNIT_STATS[DRONE][RANGE] + UNIT_STATS[DRONE][MOVEMENT]:
+                            path = createPathToward(currentState, drone.coords, enemyDrone.coords, UNIT_STATS[DRONE][MOVEMENT])
+                            if path:
+                                for enemyAnt in enemyAnts:
+                                    # Enemy range is the sum of their range and movement, as they can move before attacking
+                                    enemyRange = UNIT_STATS[enemyAnt.type][RANGE] + UNIT_STATS[enemyAnt.type][MOVEMENT]
+                                    distance = approxDist(path[-1], enemyAnt.coords)
+
+                                    # If within enemy attack range of other enemy ants, don't attack
+                                    if distance <= enemyRange:
+                                        return Move(MOVE_ANT, path, None)
+                        else: 
+                            # In this case, stay outside of enemy drone's range
+                            safeMoves = findSafeMoves(currentState, drone, enemyId, False)
+                            # Now move to the safe move closest to the enemy drone
+                            closestSafeMove = min(safeMoves,
+                                                key=lambda m: approxDist(m, enemyDrone.coords))
+                            path = createPathToward(currentState, drone.coords,
+                                                    closestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
+                            if path and len(path) > 1:
+                                return Move(MOVE_ANT, path, None)
+                            else:
+                                return Move(MOVE_ANT, [drone.coords], None)
+
+
                 # Get enemy workers
                 enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
                 
@@ -549,19 +593,30 @@ class AIPlayer(Player):
         # --- END DRONE LOGIC ---
 
 
-        # --- START RANGED SOLDIER LOGIC ---
+        # --- START RANGED SOLDIER LOGIC --- R_ TO S
 
 
         # Make a ranged soldier if enemy has ants other than workers and a queen
         if (len(getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))) > 0 and 
-        len(getAntList(currentState, me, (R_SOLDIER,))) == 0 and myInv.foodCount > 1 
+        len(getAntList(currentState, me, (SOLDIER,))) == 0 and myInv.foodCount > 2 
         and getAntAt(currentState, myHill.coords) is None):
-            return Move(BUILD, [myHill.coords], R_SOLDIER)
+            return Move(BUILD, [myHill.coords], SOLDIER)
 
 
-        # If I have a ranged soldier, move it to escort workers carrying food
-        for soldier in myRangedSoldiers:
+        # If I have a ranged soldier, make it defend and escort workers carrying food
+        for soldier in mySoldiers:  # R_ TO S
             if not (soldier.hasMoved):
+                # First check if there are any enemy ants on our side of the board
+                enemyAnts = getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))
+                for enemyAnt in enemyAnts:
+                    if enemyAnt.coords[1] < 5:
+                        # Attack the enemy ant
+                        path = createPathToward(currentState, soldier.coords, enemyAnt.coords, UNIT_STATS[R_SOLDIER][MOVEMENT])
+                        if path and len(path) > 1:
+                            return Move(MOVE_ANT, path, None)
+                        else:
+                            return Move(MOVE_ANT, [soldier.coords], None)
+
                 # Find the closest worker
                 workers = [x for x in getAntList(currentState, me, (WORKER,))]
                 
@@ -580,9 +635,8 @@ class AIPlayer(Player):
                             path = createPathToward(currentState, soldier.coords, target, UNIT_STATS[R_SOLDIER][MOVEMENT])
                             if path and len(path) > 1:
                                 return Move(MOVE_ANT, path, None)
-                            break
                 else:
-                    # No workers, default to protecting hill
+                    # No workers, default to defending the hill
                     potentialTargets = listAdjacent(myHill.coords)
                     potentialTargets.append(myHill.coords)
 
@@ -595,7 +649,6 @@ class AIPlayer(Player):
                             path = createPathToward(currentState, soldier.coords, target, UNIT_STATS[R_SOLDIER][MOVEMENT])
                             if path and len(path) > 1:
                                 return Move(MOVE_ANT, path, None)
-                            break
 
         
         # --- END RANGED SOLDIER LOGIC ---
