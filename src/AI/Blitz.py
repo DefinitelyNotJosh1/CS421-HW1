@@ -69,6 +69,8 @@ class AIPlayer(Player):
                     (9,3), (8, 3), (7, 3), (6,3), (5, 3),
                     (4,3), (3,3), (2,3), (1,3)]
             return moves
+
+        
         # place 2 food, make them as far away from enemy tunnel and hill as possible
         elif currentState.phase == SETUP_PHASE_2:
             enemyTunnel = getConstrList(currentState, None, (TUNNEL,))[0]
