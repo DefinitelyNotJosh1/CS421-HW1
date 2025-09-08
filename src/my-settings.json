@@ -1,1 +1,1 @@
-{"games": [], "additional_settings": {"swap": true, "verbose": false, "timeout": false, "autorestart": false, "pause": false, "pauseIllegal": true, "timeout_limit": "-1", "layout_chosen": "Player Invoked"}, "pause_conditions": []}
+{"games": [], "additional_settings": {"swap": true, "verbose": false, "timeout": false, "autorestart": false, "pause": true, "pauseIllegal": true, "timeout_limit": "-1", "layout_chosen": "Player Invoked"}, "pause_conditions": []}

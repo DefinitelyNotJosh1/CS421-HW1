@@ -253,11 +253,11 @@ class AIPlayer(Player):
         # If it seems the enemy will win before us due to food gathering, switch to attack mode.
         # Drone ants will throw caution to the wind and attack workers more aggressively.
         if enemyInv.foodCount > 5 and myInv.foodCount < 5 or enemyInv.foodCount > 8 and myInv.foodCount < 7:
-            print("Attack mode activated, my food count: %d, enemy food count: %d" % (myInv.foodCount, enemyInv.foodCount))
+            # print("Attack mode activated, my food count: %d, enemy food count: %d" % (myInv.foodCount, enemyInv.foodCount))
             self.attackMode = True
 
         if myInv.foodCount == 0 and len(myWorkers) == 0:
-            print("attack mode activated, no more workers")
+            # print("attack mode activated, no more workers")
             self.attackMode = True
 
 
@@ -279,10 +279,10 @@ class AIPlayer(Player):
                     # print("Moving %s at %s towards enemy queen" % (ant.type, str(ant.coords)))
                     path = createPathToward(currentState, ant.coords, enemyHill.coords, UNIT_STATS[ant.type][MOVEMENT]) # CHANGED TO HILL
                     if path and len(path) > 1:
-                        print("Path found: %s" % str(path))
+                        # print("Path found: %s" % str(path))
                         return Move(MOVE_ANT, path, None)
                     else:
-                        print("No path found, attacking in place")
+                        # print("No path found, attacking in place")
                         return Move(MOVE_ANT, [ant.coords], None)
         # else:
         #     # disable attack mode if gap is closed - maybe enabe in future?
@@ -326,22 +326,27 @@ class AIPlayer(Player):
 
         #Move the queen off the anthill so we can build stuff - unless an enemy ant is in range and on our side of the board
         if not myQueen.hasMoved:
-            # First check if there are any enemy drones in attack range
-            enemyAnts = getAntList(currentState, enemyId, (DRONE, SOLDIER,))
+            # First check if there are any enemy drones/workers/soldiers in attack range
+            enemyAnts = getAntList(currentState, enemyId, (DRONE, SOLDIER, WORKER, R_SOLDIER,))
             if enemyAnts:
                 for enemyDrone in enemyAnts:
                     distance = approxDist(myQueen.coords, enemyDrone.coords)
                     if distance <= UNIT_STATS[QUEEN][RANGE] + UNIT_STATS[QUEEN][MOVEMENT]:
                         # Attack the enemy drone if it's in range
                         path = createPathToward(currentState, myQueen.coords, enemyDrone.coords, UNIT_STATS[QUEEN][MOVEMENT])
-                        if path and len(path) > 1:
+                        if path and isPathOkForQueen(path):
                             return Move(MOVE_ANT, path, None)
-                        else:
-                            return Move(MOVE_ANT, [myQueen.coords], None)
             
-            move = moveAway(currentState, myQueen)
-            if move is not None:
-                return move
+            # If we're far from the hill, move back towards it
+            if approxDist(myQueen.coords, myHill.coords) > 3:
+                path = createPathToward(currentState, myQueen.coords, myHill.coords, UNIT_STATS[QUEEN][MOVEMENT])
+                if path and isPathOkForQueen(path):
+                    return Move(MOVE_ANT, path, None)
+            # Otherwise, make sure we're off of food/tunnel/hill
+            else:
+                move = moveAway(currentState, myQueen)
+                if move is not None:
+                    return move
 
         
         # --- START WORKER ANT LOGIC ---
@@ -357,7 +362,7 @@ class AIPlayer(Player):
         # If I don't have any workers, build one if it's safe
         if (len(myWorkers) == 0 and myInv.foodCount > 0):
             if getAntAt(currentState, myHill.coords) is None and isSafePosition(currentState, myHill.coords, enemyId, True):
-                print("No food, building worker")
+                # print("No food, building worker")
                 return Move(BUILD, [myHill.coords], WORKER)
 
 
@@ -365,13 +370,16 @@ class AIPlayer(Player):
         for worker in myWorkers:
             if not (worker.hasMoved):
                 enemyDronesAndRanged = getAntList(currentState, enemyId, (DRONE,R_SOLDIER))
-                # If enemy is attempting to attack with a drone or R_Soldier right away, save the worker
-                if not isSafePosition(currentState, worker.coords, enemyId, True) or (len(enemyDronesAndRanged) > 0 and myInv.foodCount < 3):
-                    path = createPathToward(currentState, worker.coords, myQueen.coords, UNIT_STATS[WORKER][MOVEMENT])
-                    if path and len(path) > 1:
-                        return Move(MOVE_ANT, path, None)
-                    else:
-                        return Move(MOVE_ANT, [worker.coords], None)
+                for ant in enemyDronesAndRanged:
+                    if ant.coords[1] < 5:
+                        # If enemy is attempting to attack with a drone or R_Soldier right away, save the worker
+                        if not isSafePosition(currentState, worker.coords, enemyId, True) \
+                            or (len(enemyDronesAndRanged) > 0 and myInv.foodCount < 3):
+                            path = createPathToward(currentState, worker.coords, myQueen.coords, UNIT_STATS[WORKER][MOVEMENT])
+                            if path and len(path) > 1:
+                                return Move(MOVE_ANT, path, None)
+                            else:
+                                return Move(MOVE_ANT, [worker.coords], None)
 
 
 
@@ -437,10 +445,10 @@ class AIPlayer(Player):
         # Check if queen was attacked, create a soldier to protect her if no soldier exists; 
         # otherwise move the soldier to protect her
         if self.previousQueenHealth is not None and myQueen.health < self.previousQueenHealth:
-            print("Queen was attacked")
+            # print("Queen was attacked")
             if myInv.foodCount > 1:
                 if len(getAntList(currentState, me, (SOLDIER,))) == 0 and getAntAt(currentState, myHill.coords) is None:
-                    print("Building soldier at hill")
+                    # print("Building soldier at hill")
                     return Move(BUILD, [myHill.coords], SOLDIER)
 
             if len(mySoldiers) != 0:
@@ -465,8 +473,10 @@ class AIPlayer(Player):
                     if getAntAt(currentState, move) is None:
                         return Move(MOVE_ANT, [myQueen.coords, move], None)
                 # If no safe moves, attack in place
-                print("Queen has no safe moves, attacking in place")
+                # print("Queen has no safe moves, attacking in place")
                 return Move(MOVE_ANT, [myQueen.coords], None)
+
+
 
         
         # Update previous health
@@ -529,66 +539,112 @@ class AIPlayer(Player):
                 # When attacking a drone, stay outside of the range of the other enemy's ants
                 enemyAnts = getAntList(currentState, enemyId, (QUEEN, SOLDIER, R_SOLDIER))
                 enemyDronesAndRanged = getAntList(currentState, enemyId, (DRONE, R_SOLDIER,))
+
+                # If enemy workers are vulnerable, attack them
+                enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
+                for enemyWorker in enemyWorkers:
+                    if isSafePosition(currentState, enemyWorker.coords, enemyId, True):
+
+                        # Find safe moves for the drone
+                        safeMoves = findSafeMoves(currentState, drone, enemyId, self.attackMode)
+                        
+                        if enemyWorkers and safeMoves:
+                            # Target the closest enemy worker, but only move to safe positions
+                            closestWorker = min(enemyWorkers,
+                                                key=lambda w: approxDist(drone.coords, w.coords))
+                            
+                            # Among safe moves, choose the one that gets closest to the target
+                            bestSafeMove = min(safeMoves,
+                                            key=lambda m: approxDist(m, closestWorker.coords))
+                            
+                            # Create path to the best safe move
+                            path = createPathToward(currentState, drone.coords,
+                                                    bestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
+                            if path and len(path) > 1:
+                                return Move(MOVE_ANT, path, None)
+                        else:
+                            # No enemy workers, retreat to (5,3) unless it's not safe
+                            retreatTarget = (5, 3)
+                            if legalCoord(retreatTarget) and isSafePosition(currentState, retreatTarget, enemyId, True):
+                                path = createPathToward(currentState, drone.coords,
+                                                    retreatTarget, UNIT_STATS[DRONE][MOVEMENT])
+                                if path and len(path) > 1:
+                                    return Move(MOVE_ANT, path, None)
+                                else: 
+                                    return Move(MOVE_ANT, [drone.coords], None)
+                            else:
+                                safeMoves = findSafeMoves(currentState, drone, enemyId, True)
+                                if safeMoves:
+                                    randomSafeMove = random.choice(safeMoves)
+                                    path = createPathToward(currentState, drone.coords,
+                                                        randomSafeMove, UNIT_STATS[DRONE][MOVEMENT])
+                                    if path and len(path) > 1:
+                                        return Move(MOVE_ANT, path, None)
+                                    else:
+                                        return Move(MOVE_ANT, [drone.coords], None)
+
                 if enemyDronesAndRanged:
-                    print("Enemy has a drone/Ranged Soldier, attacking")
+                    # print("Enemy has a drone/Ranged Soldier, attacking")
                     for enemyDRS in enemyDronesAndRanged:
                         if approxDist(drone.coords, enemyDRS.coords) <= UNIT_STATS[DRONE][RANGE] + UNIT_STATS[DRONE][MOVEMENT]:
                             path = createPathToward(currentState, drone.coords, enemyDRS.coords, UNIT_STATS[DRONE][MOVEMENT])
                             if path:
-                                for enemyAnt in enemyAnts:
-                                    # Enemy range is the sum of their range and movement, as they can move before attacking
-                                    enemyRange = UNIT_STATS[enemyAnt.type][RANGE] + UNIT_STATS[enemyAnt.type][MOVEMENT]
-                                    distance = approxDist(path[-1], enemyAnt.coords)
-
-                                    # If within enemy attack range of other enemy ants, don't attack
-                                    if distance <= enemyRange:
-                                        return Move(MOVE_ANT, path, None)
+                                return Move(MOVE_ANT, path, None)
                         else: 
                             # In this case, stay outside of enemy drone's range
                             safeMoves = findSafeMoves(currentState, drone, enemyId, False)
                             # Now move to the safe move closest to the enemy drone
-                            closestSafeMove = min(safeMoves,
-                                                key=lambda m: approxDist(m, enemyDRS.coords))
-                            path = createPathToward(currentState, drone.coords,
-                                                    closestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
-                            if path and len(path) > 1:
-                                return Move(MOVE_ANT, path, None)
+                            if safeMoves:
+                                closestSafeMove = min(safeMoves,    
+                                                    key=lambda m: approxDist(m, enemyDRS.coords))
+                                path = createPathToward(currentState, drone.coords,
+                                                        closestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
+                                if path and len(path) > 1:
+                                    return Move(MOVE_ANT, path, None)
                             else:
                                 return Move(MOVE_ANT, [drone.coords], None)
 
-
-                # Get enemy workers
-                enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
-                
-                # Find safe moves for the drone
-                safeMoves = findSafeMoves(currentState, drone, enemyId, self.attackMode)
-                
-                if enemyWorkers and safeMoves:
-                    # Target the closest enemy worker, but only move to safe positions
-                    closestWorker = min(enemyWorkers,
-                                        key=lambda w: approxDist(drone.coords, w.coords))
-                    
-                    # Among safe moves, choose the one that gets closest to the target
-                    bestSafeMove = min(safeMoves,
-                                       key=lambda m: approxDist(m, closestWorker.coords))
-                    
-                    # Create path to the best safe move
-                    path = createPathToward(currentState, drone.coords,
-                                            bestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
-                    if path and len(path) > 1:
-                        return Move(MOVE_ANT, path, None)
                 else:
-                     # No enemy workers, retreat to (5,3)
-                    retreatTarget = (5, 3)
-                    if legalCoord(retreatTarget):
+                    # Get enemy workers
+                    enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
+                    
+                    # Find safe moves for the drone
+                    safeMoves = findSafeMoves(currentState, drone, enemyId, self.attackMode)
+                    
+                    if enemyWorkers and safeMoves:
+                        # Target the closest enemy worker, but only move to safe positions
+                        closestWorker = min(enemyWorkers,
+                                            key=lambda w: approxDist(drone.coords, w.coords))
+                        
+                        # Among safe moves, choose the one that gets closest to the target
+                        bestSafeMove = min(safeMoves,
+                                        key=lambda m: approxDist(m, closestWorker.coords))
+                        
+                        # Create path to the best safe move
                         path = createPathToward(currentState, drone.coords,
-                                            retreatTarget, UNIT_STATS[DRONE][MOVEMENT])
+                                                bestSafeMove, UNIT_STATS[DRONE][MOVEMENT])
                         if path and len(path) > 1:
                             return Move(MOVE_ANT, path, None)
-                        else: 
-                            return Move(MOVE_ANT, [drone.coords], None)
-        # END MY NEW CODE
-
+                    else:
+                        # No enemy workers, retreat to (5,3) unless it's not safe
+                        retreatTarget = (5, 3)
+                        if legalCoord(retreatTarget) and isSafePosition(currentState, retreatTarget, enemyId, True):
+                            path = createPathToward(currentState, drone.coords,
+                                                retreatTarget, UNIT_STATS[DRONE][MOVEMENT])
+                            if path and len(path) > 1:
+                                return Move(MOVE_ANT, path, None)
+                            else: 
+                                return Move(MOVE_ANT, [drone.coords], None)
+                        else:
+                            safeMoves = findSafeMoves(currentState, drone, enemyId, True)
+                            if safeMoves:
+                                randomSafeMove = random.choice(safeMoves)
+                                path = createPathToward(currentState, drone.coords,
+                                                    randomSafeMove, UNIT_STATS[DRONE][MOVEMENT])
+                                if path and len(path) > 1:
+                                    return Move(MOVE_ANT, path, None)
+                                else:
+                                    return Move(MOVE_ANT, [drone.coords], None)
 
 
         # --- END DRONE LOGIC ---
@@ -716,6 +772,11 @@ class AIPlayer(Player):
                 return enemyRanged[0]
             else:
                 return enemyLocations[0]
+
+        return enemyLocations[0]
+    
+
+
     ##
     #registerWin
     #
