@@ -285,7 +285,7 @@ class AIPlayer(Player):
                         # print("No path found, attacking in place")
                         return Move(MOVE_ANT, [ant.coords], None)
         # else:
-        #     # disable attack mode if gap is closed - maybe enabe in future?
+        #     # disable attack mode if gap is closed - maybe enable in future?
         #     self.attackMode = False
 
 
@@ -530,7 +530,7 @@ class AIPlayer(Player):
 
         
         # --- START DRONE LOGIC ---
-        # TODO: MAKE DRONES ATTACK IF THEY WON'T DIE FROM ATTACKER (DRONE OR R_SOLDIER)
+
 
         for drone in myDrones:
             if not (drone.hasMoved):
@@ -650,18 +650,18 @@ class AIPlayer(Player):
         # --- END DRONE LOGIC ---
 
 
-        # --- START RANGED SOLDIER LOGIC --- R_ TO S
+        # --- START SOLDIER LOGIC ---
 
 
-        # Make a ranged soldier if enemy has ants other than workers and a queen
+        # Make a soldier if enemy has ants other than workers and a queen. If they don't, no need to waste food
         if (len(getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))) > 0 and 
         len(getAntList(currentState, me, (SOLDIER,))) == 0 and myInv.foodCount > 2 
         and getAntAt(currentState, myHill.coords) is None):
             return Move(BUILD, [myHill.coords], SOLDIER)
 
 
-        # If I have a ranged soldier, make it defend and escort workers carrying food
-        for soldier in mySoldiers:  # R_ TO S
+        # If I have a soldier, make it defend and escort workers carrying food
+        for soldier in mySoldiers:
             if not (soldier.hasMoved):
                 # First check if there are any enemy ants on our side of the board
                 enemyAnts = getAntList(currentState, enemyId, (DRONE,SOLDIER,R_SOLDIER))
@@ -708,7 +708,7 @@ class AIPlayer(Player):
                                 return Move(MOVE_ANT, path, None)
 
         
-        # --- END RANGED SOLDIER LOGIC ---
+        # --- END SOLDIER LOGIC ---
   
    
         # --- START CLEANUP ---
