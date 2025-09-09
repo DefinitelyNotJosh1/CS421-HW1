@@ -125,6 +125,7 @@ class AIPlayer(Player):
         myRangedSoldiers = getAntList(currentState, me, (R_SOLDIER,))
         mySoldiers = getAntList(currentState, me, (SOLDIER,))
         myWorkers = getAntList(currentState, me, (WORKER,))
+        myAnts = getAntList(currentState, me, (QUEEN, R_SOLDIER, DRONE, SOLDIER, WORKER))
 
 
         #the first time this method is called, the food and tunnel locations
@@ -154,6 +155,11 @@ class AIPlayer(Player):
         
         # Attack Mode Logic
         move = self.handleAttackMode(currentState, myInv, enemyInv, myWorkers, me, enemyId, myHill)
+        if move is not None:
+            return move
+        
+        # Stalemate
+        move = self.handleStalemate(currentState, me, myInv, myAnts, enemyInv, enemyId)
         if move is not None:
             return move
         
@@ -478,7 +484,7 @@ class AIPlayer(Player):
                         # If enemy is attempting to attack with a drone or R_Soldier right away, save the worker
                         if not self.isSafePosition(currentState, worker.coords, enemyId, True) \
                             or (len(enemyDronesAndRanged) > 0 and myInv.foodCount < 3):
-                            path = createPathToward(currentState, worker.coords, myQueen.coords, UNIT_STATS[WORKER][MOVEMENT])
+                            path = createPathToward(currentState, worker.coords, (0,0), UNIT_STATS[WORKER][MOVEMENT])
                             if path and len(path) > 1:
                                 return Move(MOVE_ANT, path, None)
                             else:
@@ -522,16 +528,6 @@ class AIPlayer(Player):
                     random.shuffle(adjacentCoords)
                     # Try to move away from other ants
                     return Move(MOVE_ANT, [worker.coords, adjacentCoords[0]], None)
-
-        # End my turn if I'm about to win; don't build anything
-        if myInv.foodCount > 10:
-            myAnts = getAntList(currentState, me, (QUEEN, R_SOLDIER, DRONE, SOLDIER))
-            for ant in myAnts:
-                if not (ant.hasMoved):
-                    move = self.moveAway(currentState, ant)
-                    return move
-            return Move(END, None, None)
-
         return None
 
 
@@ -683,11 +679,21 @@ class AIPlayer(Player):
             if not (drone.hasMoved):
                 # Killing workers is priority
                 enemyDronesAndRanged = getAntList(currentState, enemyId, (DRONE, R_SOLDIER,))
+                unsafe = False
 
-                # If enemy workers are vulnerable, attack them
+                if enemyDronesAndRanged:
+                    for enemyDRS in enemyDronesAndRanged:
+                        if enemyDRS.coords[1] < 5:
+                            # If enemy is attempting to attack with a drone or R_Soldier right away, attack it
+                            unsafe = True
+                            break
+
+                            
+
+                # If enemy workers are vulnerable, attack them, but only if we are safe
                 enemyWorkers = getAntList(currentState, enemyId, (WORKER,))
                 for enemyWorker in enemyWorkers:
-                    if self.isSafePosition(currentState, enemyWorker.coords, enemyId, True):
+                    if self.isSafePosition(currentState, enemyWorker.coords, enemyId, True) and unsafe == False:
 
                         # Find safe moves for the drone
                         safeMoves = self.findSafeMoves(currentState, drone, enemyId, self.attackMode)
@@ -867,7 +873,42 @@ class AIPlayer(Player):
                                 return Move(MOVE_ANT, path, None)
 
         return None
-  
+    
+
+
+    ## handleStalemate
+    #
+    # If neither player has workers/food but I have soldiers/drones, move towards enemy hill
+    #
+    # Parameters:
+    #   currentState - the current game state
+    #   me - current player id
+    #   myAnts - current player's ants
+    #   enemyId - enemy player id
+    #
+    # Returns:
+    #   A Move object if an action was taken, None otherwise
+    #
+    def handleStalemate(self, currentState, me, myInv, myAnts, enemyInv, enemyId):
+        enemyHill = getConstrList(currentState, enemyId, (ANTHILL,))[0]
+
+        if myInv.foodCount == 0 and enemyInv.foodCount == 0:
+            myWorkers = getAntList(currentState, me, (WORKER,))
+            enemyAnts = getAntList(currentState, enemyId, (WORKER,DRONE,SOLDIER,R_SOLDIER))
+            if len(myWorkers) == 0 and len(enemyAnts) == 0:
+                # If I have soldiers or drones, move them towards the enemy hill
+                myCombatAnts = [ant for ant in myAnts if ant.type in (SOLDIER, DRONE, R_SOLDIER)]
+                if myCombatAnts:
+                    for ant in myCombatAnts:
+                        if not (ant.hasMoved):
+                            path = createPathToward(currentState, ant.coords, enemyHill.coords, UNIT_STATS[ant.type][MOVEMENT])
+                            if path and len(path) > 1:
+                                return Move(MOVE_ANT, path, None)
+                            else:
+                                return Move(MOVE_ANT, [ant.coords], None)
+        return None
+
+
    
     ##
     # handleCleanup - 
